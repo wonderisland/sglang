@@ -3700,6 +3700,30 @@ class DeepseekV4Model(nn.Module):
                 moe_routed_quant_stream=self.moe_routed_quant_stream,
             ),
             prefix=add_prefix("layers", prefix),
+            offloader_kwargs=dict(
+                submodule_accessor=lambda layer: (
+                    layer.mlp.experts
+                    if isinstance(layer.mlp, deepseek_v2.DeepseekV2MoE)
+                    else layer.mlp
+                ),
+                whitelist_param_names_creator=lambda module: (
+                    [
+                        "w13_weight",
+                        "w2_weight",
+                        # only for nvfp4
+                        *(
+                            [
+                                "w13_blockscale_swizzled",
+                                "w2_blockscale_swizzled",
+                            ]
+                            if hasattr(module, "w13_blockscale_swizzled")
+                            else []
+                        ),
+                    ]
+                    if isinstance(module, FusedMoE)
+                    else []
+                ),
+            ),
             final_read=hc_boundary.FinalRead() if _is_cuda else None,
             stage_facts=functools.partial(hc_boundary.stages, config)
             if _is_cuda
